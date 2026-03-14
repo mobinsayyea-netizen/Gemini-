@@ -1,29 +1,38 @@
-const axios = require('axios');
+const https = require('https');
 
 module.exports = async (req, res) => {
-  // CORS और मेथड चेक
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
   const { text, key, voice = "en-US-Studio-O" } = req.body || req.query;
 
   if (!text || !key) {
-    return res.status(400).send("Text and Key are required.");
+    return res.status(200).send("Server Online");
   }
 
-  try {
-    const response = await axios.post(
-      `https://texttospeech.googleapis.com/v1beta1/text:synthesize?key=${key}`,
-      {
-        input: { text: text },
-        voice: { languageCode: "en-US", name: voice },
-        audioConfig: { audioEncoding: "LINEAR16" }
-      }
-    );
+  const data = JSON.stringify({
+    input: { text: text },
+    voice: { languageCode: "en-US", name: voice },
+    audioConfig: { audioEncoding: "LINEAR16" }
+  });
 
-    res.status(200).send(response.data.audioContent);
-  } catch (error) {
-    res.status(500).send(error.message);
-  }
+  const options = {
+    hostname: 'texttospeech.googleapis.com',
+    path: `/v1beta1/text:synthesize?key=${key}`,
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Content-Length': data.length
+    }
+  };
+
+  const gReq = https.request(options, (gRes) => {
+    let body = '';
+    gRes.on('data', (chunk) => body += chunk);
+    gRes.on('end', () => {
+      const jsonRes = JSON.parse(body);
+      res.status(200).send(jsonRes.audioContent);
+    });
+  });
+
+  gReq.on('error', (e) => res.status(500).send(e.message));
+  gReq.write(data);
+  gReq.end();
 };
