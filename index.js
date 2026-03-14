@@ -1,15 +1,24 @@
 const https = require('https');
 
 module.exports = async (req, res) => {
-  const { text, key } = req.body || req.query || {};
-
-  if (!text || !key) {
-    return res.status(200).send("Server is Live. Send text and key.");
+  // CORS प्री-फ्लाइट
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
   }
 
+  const { text, key, voice } = req.body || {};
+
+  if (!text || !key) {
+    return res.status(200).send("Server is Online. Please send text and key.");
+  }
+
+  // गूगल को भेजने के लिए डेटा तैयार करना
   const data = JSON.stringify({
-    input: { text },
-    voice: { languageCode: "en-US", name: "en-US-Studio-O" },
+    input: { text: text },
+    voice: { 
+      languageCode: voice ? voice.substring(0, 5) : "en-US", 
+      name: voice || "en-US-Studio-O" 
+    },
     audioConfig: { audioEncoding: "LINEAR16" }
   });
 
@@ -27,21 +36,25 @@ module.exports = async (req, res) => {
     let chunks = [];
     gRes.on('data', (d) => chunks.push(d));
     gRes.on('end', () => {
-      let body = Buffer.concat(chunks).toString();
+      const responseBody = Buffer.concat(chunks).toString();
       try {
-        const json = JSON.parse(body);
+        const json = JSON.parse(responseBody);
         if (json.audioContent) {
           res.status(200).send(json.audioContent);
         } else {
-          res.status(500).send("Google API Error: " + body);
+          // गूगल का असली एरर यहाँ पकड़ में आएगा
+          res.status(200).send("GOOGLE_ERROR: " + (json.error ? json.error.message : responseBody));
         }
       } catch (e) {
-        res.status(500).send("Parse Error");
+        res.status(200).send("PARSE_ERROR: " + responseBody);
       }
     });
   });
 
-  gReq.on('error', (e) => res.status(500).send(e.message));
+  gReq.on('error', (e) => {
+    res.status(200).send("REQUEST_ERROR: " + e.message);
+  });
+
   gReq.write(data);
   gReq.end();
 };
