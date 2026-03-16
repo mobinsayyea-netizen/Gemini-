@@ -1,67 +1,39 @@
-const https = require('https');
-
-module.exports = async (req, res) => {
-  // CORS Permissions
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
-  // डेटा को सही तरीके से पढ़ना
-  let body = '';
-  req.on('data', chunk => { body += chunk.toString(); });
-  
-  req.on('end', () => {
-    try {
-      const parsedBody = JSON.parse(body);
-      const { text, key, voice } = parsedBody;
-
-      if (!text || !key) {
-        return res.status(200).send("MISSING_DATA: Text and Key are required.");
-      }
-
-      const googleData = JSON.stringify({
-        input: { text: text },
-        voice: { 
-          languageCode: voice ? voice.substring(0, 5) : "en-US", 
-          name: voice || "en-US-Studio-O" 
-        },
-        audioConfig: { audioEncoding: "LINEAR16" }
-      });
-
-      const options = {
-        hostname: 'texttospeech.googleapis.com',
-        path: `/v1beta1/text:synthesize?key=${key}`,
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(googleData)
-        }
-      };
-
-      const gReq = https.request(options, (gRes) => {
-        let chunks = [];
-        gRes.on('data', (d) => chunks.push(d));
-        gRes.on('end', () => {
-          const responseBody = Buffer.concat(chunks).toString();
-          const json = JSON.parse(responseBody);
-          if (json.audioContent) {
-            res.status(200).send(json.audioContent);
-          } else {
-            res.status(200).send("GOOGLE_ERROR: " + (json.error ? json.error.message : "Unknown Error"));
-          }
-        });
-      });
-
-      gReq.on('error', (e) => res.status(200).send("REQUEST_ERROR: " + e.message));
-      gReq.write(googleData);
-      gReq.end();
-
-    } catch (e) {
-      res.status(200).send("SERVER_PARSE_ERROR: " + e.message);
-    }
-  });
-};
+const axios = require('axios');
+​export default async function handler(req, res) {
+res.setHeader('Access-Control-Allow-Origin', '*');
+res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+​if (req.method === 'OPTIONS') return res.status(200).end();
+​const { text, key, voice } = req.body || req.query;
+​if (!text || !key) {
+return res.status(400).json({ error: "Text and Key are required." });
+}
+​let voiceName = "en-US-Journey-D";
+​if (voice) {
+if (voice.includes("Puck")) voiceName = "en-US-Journey-D";
+else if (voice.includes("Charon")) voiceName = "en-US-Journey-F";
+else if (voice.includes("Kore")) voiceName = "en-US-Journey-O";
+else if (voice.includes("Fenrir")) voiceName = "en-US-Journey-D";
+else if (voice.includes("Leda")) voiceName = "en-US-Journey-O";
+else if (voice.includes("Female")) voiceName = "en-US-Studio-O";
+else if (voice.includes("Male")) voiceName = "en-US-Studio-Q";
+}
+​try {
+const response = await axios.post(
+https://texttospeech.googleapis.com/v1/text:synthesize?key=${key},
+{
+input: { text: text },
+voice: { languageCode: "en-US", name: voiceName },
+audioConfig: { audioEncoding: "MP3" }
+}
+);
+​res.status(200).json({
+audioContent: response.data.audioContent
+});
+​} catch (error) {
+res.status(500).json({
+error: "Google API Error",
+message: error.response ? error.response.data : error.message
+});
+}
+}
